@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Content HTML Purifier</title>
+
+    <style>
+        /* Global Variables & Reset */
+        :root {
+            --color-bg: #111827; /* gray-900 */
+            --color-bg-light: #1f2937; /* gray-800 */
+            --color-bg-lighter: #374151; /* gray-700 */
+            --color-border: #4b5563; /* gray-600 */
+            --color-text: #d1d5db; /* gray-300 */
+            --color-text-light: #9ca3af; /* gray-400 */
+            --color-accent: #3b82f6; /* blue-500 */
+            --color-accent-hover: #2563eb; /* blue-600 */
+            --color-danger: #ef4444; /* red-500 */
+            --color-success: #22c55e; /* green-500 */
+            --border-radius: 0.5rem; /* Slightly smaller for cleaner look */
+            --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --sidebar-width: 250px; /* Fixed width for the sidebar */
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%; /* Make html and body take full viewport height */
+            width: 100%; /* Make html and body take full viewport width */
+            overflow: hidden; /* Hide default scrollbars on html/body */
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            line-height: 1.6;
+        }
+
+        /* --- Main Layout: Sidebar and Content Area --- */
+        .app-wrapper {
+            display: flex; /* Flex container for sidebar and main content */
+            height: 100%; /* Take full height from body */
+            width: 100%; /* Take full width from body */
+        }
+
+        .sidebar {
+            flex: 0 0 var(--sidebar-width); /* Fixed width, non-flexing */
+            background-color: var(--color-bg-light);
+            border-right: 1px solid var(--color-border);
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            overflow-y: auto; /* Scroll for sidebar content if it overflows */
+        }
+
+        .sidebar-header {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 0.5rem;
+        }
+
+        .sidebar .btn-new-note {
+            width: 100%;
+            background-color: var(--color-accent);
+            color: white;
+            padding: 0.75rem;
+            border-radius: var(--border-radius);
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            border: none;
+            transition: background-color 0.2s;
+        }
+        .sidebar .btn-new-note:hover { background-color: var(--color-accent-hover); }
+
+        .note-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            flex-grow: 1; /* Allows the list to take available space */
+        }
+
+        .note-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0.5rem;
+            border-radius: var(--border-radius);
+            margin-bottom: 0.5rem;
+            background-color: transparent;
+            color: var(--color-text);
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+        .note-item:hover {
+            background-color: var(--color-bg-lighter);
+        }
+        .note-item.active {
+            background-color: var(--color-border); /* Highlight active note */
+            color: white;
+            font-weight: 600;
+        }
+
+        .note-item-name {
+            flex-grow: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding-right: 0.5rem;
+        }
+
+        .note-actions {
+            display: flex;
+            gap: 0.25rem;
+            flex-shrink: 0;
+        }
+
+        .note-actions button {
+            background: none;
+            border: none;
+            color: var(--color-text-light);
+            cursor: pointer;
+            font-size: 0.9rem;
+            padding: 0.25rem;
+            border-radius: 0.25rem;
+            transition: color 0.2s, background-color 0.2s;
+        }
+        .note-item.active .note-actions button {
+             color: white; /* Icons also white when active */
+        }
+        .note-actions button:hover {
+            color: white;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        .note-actions button.delete:hover {
+            color: var(--color-danger);
+        }
+
+        /* Sidebar Footer */
+        .sidebar-footer {
+            margin-top: auto; /* Pushes the footer to the bottom */
+            text-align: center;
+            padding-top: 1rem;
+            border-top: 1px solid var(--color-border);
+            font-size: 0.75rem;
+            color: var(--color-text-light);
+        }
+
+        .sidebar-footer a {
+            color: var(--color-accent);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .sidebar-footer a:hover {
+            color: var(--color-accent-hover);
+            text-decoration: underline;
+        }
+
+        /* --- Main Content Area (Editor & Source) --- */
+        .main-content {
+            flex-grow: 1; /* Takes up remaining space */
+            display: flex;
+            flex-direction: column;
+            padding: 1rem; /* Padding around the editor/source cards */
+            overflow-y: auto; /* Allow main content area to scroll if header + editor exceeds height */
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 1.5rem; /* Space between header and editor */
+        }
+
+        header h1 {
+            font-size: 2.25rem;
+            font-weight: 800;
+            color: #fff;
+        }
+        
+        header p {
+            font-size: 1.125rem;
+            color: var(--color-text-light);
+            margin-top: 0.5rem;
+        }
+
+        .editor-container, .source-code-container {
+            position: relative; /* For link editor positioning */
+            display: flex;
+            flex-direction: column;
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            border: 1px solid var(--color-border);
+            background-color: var(--color-bg-light); /* Matched to sidebar */
+            box-shadow: var(--shadow);
+            flex-grow: 1; /* Allow editor/source to grow to fill available height */
+        }
+
+        /* Navbar/Toolbar */
+        .navbar-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1rem;
+            background-color: var(--color-bg-lighter);
+            border-bottom: 1px solid var(--color-border);
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .navbar-toolbar .format-buttons {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        /* Toolbar Buttons & Selects - Refined Design */
+        .toolbar-btn, .toolbar-select {
+            background-color: var(--color-bg-light);
+            border: 1px solid var(--color-border);
+            color: var(--color-text);
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+            line-height: 1.25rem;
+            transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .toolbar-btn:hover, .toolbar-select:hover { background-color: var(--color-bg); border-color: var(--color-accent); }
+        .toolbar-btn:active { background-color: var(--color-bg-lighter); transform: translateY(1px); }
+
+        /* Specific small button style for "Show Source Code" */
+        .btn-small {
+            padding: 0.5rem 0.875rem;
+            font-size: 0.875rem;
+            line-height: 1.25rem;
+            background-color: var(--color-accent);
+            color: white;
+            border: none;
+        }
+        .btn-small:hover { background-color: var(--color-accent-hover); }
+
+        /* Editor Content Area - CRITICAL FOR BOLDING FIX */
+        #editor {
+            flex-grow: 1; /* Allows the editor to take available height */
+            padding: 1.5rem;
+            outline: none;
+            overflow-y: auto; /* Add scrollbar to editor content if it overflows */
+            background-color: white; /* WHITE BACKGROUND */
+            color: #333; /* DARK TEXT FOR CONTRAST ON WHITE */
+            word-wrap: break-word;
+            font-size: 1rem;
+            line-height: 1.6;
+            text-align: left;
+            max-width: 100%;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-weight: normal; /* IMPORTANT: Explicitly set normal weight for editor content */
+        }
+
+        /* Basic editor content styling for default readability */
+        #editor p {
+            margin-bottom: 0.75em;
+            font-weight: normal; /* CRITICAL: Ensure p tags are NOT bold by default */
+        }
+        #editor h1, #editor h2, #editor h3, #editor h4, #editor h5, #editor h6 { margin-top: 1.5em; margin-bottom: 0.75em; font-weight: bold; color: #1a202c; }
+        
+        /* FIX: Remove margin-top for the first element inside the editor */
+        #editor > *:first-child {
+            margin-top: 0 !important;
+        }
+
+        #editor h1 { font-size: 2em; }
+        #editor h2 { font-size: 1.75em; }
+        #editor h3 { font-size: 1.5em; }
+        #editor h4 { font-size: 1.25em; }
+        #editor h5 { font-size: 1.125em; }
+        #editor h6 { font-size: 1em; }
+        #editor ul, #editor ol { margin-left: 2em; margin-bottom: 0.75em; list-style-position: outside; }
+        #editor li { margin-bottom: 0.25em; }
+        #editor a { color: var(--color-accent); text-decoration: underline; }
+        #editor strong, #editor b { font-weight: bold; } /* Only these should be bold */
+        #editor em, #editor i { font-style: italic; }
+        #editor u { text-decoration: underline; }
+        #editor blockquote { border-left: 4px solid #ccc; padding-left: 1em; margin-left: 1em; color: #555; }
+        #editor pre { background-color: #f0f0f0; padding: 1em; border-radius: 5px; overflow-x: auto; font-family: 'Fira Code', 'Cascadia Code', 'Roboto Mono', monospace; }
+
+        /* Source Code Textarea */
+        #sourceCodeTextarea {
+            flex-grow: 1; /* Take full height */
+            padding: 1rem;
+            border: none;
+            font-family: 'Fira Code', 'Cascadia Code', 'Roboto Mono', monospace;
+            font-size: 0.875rem;
+            line-height: 1.5;
+            background-color: #111827;
+            color: #d1d5db;
+            resize: vertical; /* Allow resizing only vertically */
+            outline: none;
+            box-sizing: border-box;
+            border-radius: 0 0 var(--border-radius) var(--border-radius);
+        }
+
+        .source-code-container h2 {
+            background-color: var(--color-bg-lighter);
+            color: white;
+            padding: 0.75rem 1rem;
+            margin: 0;
+            font-size: 1.125rem;
+            font-weight: 600;
+            border-radius: var(--border-radius) var(--border-radius) 0 0;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        /* General Buttons (for toggle/apply) */
+        .btn {
+            display: inline-block;
+            background-color: var(--color-accent);
+            color: #fff;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            text-decoration: none;
+        }
+        .btn:hover { background-color: var(--color-accent-hover); }
+        .btn:disabled { background-color: var(--color-bg-lighter); cursor: not-allowed; }
+
+        /* --- Link Editor Popover --- */
+        .link-editor {
+            position: absolute;
+            background-color: var(--color-bg-lighter);
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            padding: 0.5rem;
+            display: flex;
+            gap: 0.5rem;
+            box-shadow: var(--shadow);
+            z-index: 1000; /* Ensure it's on top */
+            opacity: 0; /* Start hidden */
+            pointer-events: none; /* Disable interaction when hidden */
+            transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+            transform: translateY(10px); /* Slide in from bottom */
+        }
+        .link-editor.active {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0);
+        }
+        .link-editor input {
+            flex-grow: 1;
+            padding: 0.3rem 0.5rem;
+            border: 1px solid var(--color-border);
+            border-radius: 0.25rem;
+            background-color: var(--color-bg-light);
+            color: var(--color-text);
+            outline: none;
+            min-width: 150px; /* Ensure input is wide enough */
+        }
+        .link-editor input::placeholder {
+            color: var(--color-text-light);
+        }
+        .link-editor button {
+            background-color: var(--color-accent);
+            color: white;
+            border: none;
+            border-radius: 0.25rem;
+            padding: 0.3rem 0.6rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .link-editor button:hover {
+            background-color: var(--color-accent-hover);
+        }
+        .link-editor button#linkRemoveButton {
+            background-color: var(--color-danger);
+        }
+        .link-editor button#linkRemoveButton:hover {
+            background-color: #dc2626; /* red-600 */
+        }
+
+
+        /* Responsive adjustments for Mobile */
+        @media (max-width: 768px) {
+            .app-wrapper {
+                flex-direction: column; /* Stack sidebar and main content vertically */
+            }
+            .sidebar {
+                flex: none; /* Remove fixed width */
+                width: 100%; /* Take full width */
+                /* Removed max-height to allow it to expand naturally and scroll */
+                border-right: none;
+                border-bottom: 1px solid var(--color-border);
+                padding-bottom: 0.5rem; /* Adjust padding for mobile footer */
+            }
+            .sidebar-footer {
+                padding-top: 0.5rem; /* Smaller padding for mobile */
+                margin-top: 0.5rem; /* Smaller margin for mobile */
+            }
+            .main-content {
+                padding: 0.5rem; /* Reduce padding on small screens */
+                flex-grow: 1; /* Allow main content to take remaining space */
+            }
+            .editor-container, .source-code-container {
+                min-height: 400px; /* Ensure editor area has sufficient height on mobile */
+            }
+            .navbar-toolbar {
+                flex-direction: row; /* Allow buttons to flow horizontally */
+                justify-content: flex-start; /* Align buttons to the left */
+                flex-wrap: wrap; /* Ensure buttons wrap to the next line */
+                gap: 0.4rem; /* Slightly smaller gap for mobile buttons */
+            }
+            .navbar-toolbar .format-buttons {
+                justify-content: flex-start; /* Align format buttons to the start */
+                margin-bottom: 0.5rem;
+                flex-grow: 1; /* Allow format buttons container to grow */
+            }
+            .toolbar-btn, .toolbar-select, .btn-small {
+                /* Remove width: 100%; - let them take natural width and wrap */
+                flex: 0 0 auto; /* Allow items to take their content width and wrap */
+                padding: 0.4rem 0.6rem; /* Slightly smaller padding for mobile buttons */
+                font-size: 0.8rem; /* Slightly smaller font for mobile buttons */
+            }
+            .link-editor {
+                flex-wrap: wrap;
+                width: calc(100% - 1rem); /* Full width minus padding */
+                left: 0.5rem !important; /* Adjust left for small screens */
+                right: 0.5rem !important;
+                transform: translateY(10px) translateX(-50%); /* Center horizontally, slide from bottom */
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-wrapper">
+        <div class="sidebar">
+            <h2 class="sidebar-header">Notes</h2>
+            <button class="btn-new-note" onclick="createNewNote()">New Note</button>
+            <ul id="noteList" class="note-list">
+                </ul>
+            <div class="sidebar-footer">
+                <small>Developed by <a href="https://rakibalom.com/" target="_blank" rel="noopener noreferrer">Rakib Alom</a></small>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <header>
+                <h1>Content HTML Purifier 🚀</h1>
+                <p>This custom editor cleans HTML. Paste content from Google Docs or any website; it will remove extra HTML, inline styles, and redundant tags, leaving professional, semantic HTML.</p>
+            </header>
+            
+            <div class="editor-container">
+                <div class="navbar-toolbar">
+                    <div class="format-buttons">
+                        <select id="formatBlock" class="toolbar-select">
+                            <option value="p">Normal</option>
+                            <option value="h1">Heading 1</option>
+                            <option value="h2">Heading 2</option>
+                            <option value="h3">Heading 3</option>
+                            <option value="h4">Heading 4</option>
+                            <option value="h5">Heading 5</option>
+                            <option value="h6">Heading 6</option>
+                            <option value="blockquote">Blockquote</option>
+                            <option value="pre">Code</option>
+                        </select>
+                        <button type="button" onclick="execCmd('bold')" class="toolbar-btn"><b>B</b></button>
+                        <button type="button" onclick="execCmd('italic')" class="toolbar-btn"><i>I</i></button>
+                        <button type="button" onclick="execCmd('underline')" class="toolbar-btn"><u>U</u></button>
+                        <button type="button" onclick="execCmd('insertUnorderedList')" class="toolbar-btn">&#8226; List</button>
+                        <button type="button" onclick="execCmd('insertOrderedList')" class="toolbar-btn">1. List</button>
+                        <button type="button" id="createLinkBtn" class="toolbar-btn">Link</button>
+                        <button type="button" onclick="execCmd('unlink')" class="toolbar-btn">Unlink</button>
+                        <button type="button" onclick="execCmd('insertImage')" class="toolbar-btn">Image</button>
+                        <button type="button" onclick="execCmd('removeFormat')" class="toolbar-btn">Clear Format</button>
+                    </div>
+                    <div class="source-toggle-wrapper">
+                         <button id="toggleSource" class="btn-small">Show Source Code</button>
+                    </div>
+                </div>
+                <div id="editor" contenteditable="true"></div>
+
+                <div id="linkEditor" class="link-editor">
+                    <input type="url" id="linkUrlInput" placeholder="https://example.com" />
+                    <button id="linkUpdateButton" title="Update Link">&#10003;</button>
+                    <button id="linkRemoveButton" title="Remove Link">&#10006;</button>
+                </div>
+            </div>
+
+            <div id="sourceCode" class="editor-container" style="display: none;">
+                <h2>Purified HTML Source Code</h2>
+                <textarea id="sourceCodeTextarea"></textarea>
+                <div class="navbar-toolbar" style="border-radius: 0 0 var(--border-radius) var(--border-radius); justify-content: flex-end;">
+                    <button id="applySource" class="btn">Apply Changes & Hide Source</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const editor = document.getElementById('editor');
+        const toggleSourceButton = document.getElementById('toggleSource');
+        const sourceCodeDiv = document.getElementById('sourceCode');
+        const sourceCodeTextarea = document.getElementById('sourceCodeTextarea');
+        const applySourceButton = document.getElementById('applySource');
+        const editorVisualContainer = document.querySelector('.editor-container'); // Visual editor container
+        const formatBlockSelect = document.getElementById('formatBlock');
+        const noteList = document.getElementById('noteList');
+        const createLinkBtn = document.getElementById('createLinkBtn'); // Link button
+        
+        // Link Editor elements
+        const linkEditor = document.getElementById('linkEditor');
+        const linkUrlInput = document.getElementById('linkUrlInput');
+        const linkUpdateButton = document.getElementById('linkUpdateButton');
+        const linkRemoveButton = document.getElementById('linkRemoveButton');
+
+        let notes = [];
+        let currentNoteId = null; // To keep track of the currently active note
+        let isInitialLoad = true; // Flag to manage initial loading behavior
+        let currentRange = null; // To store the current text selection range
+        let currentLinkElement = null; // To store the <a> element being edited
+
+        // --- Note Management Functions ---
+
+        function saveNotes() {
+            localStorage.setItem('htmlPurifierNotes', JSON.stringify(notes));
+        }
+
+        function loadNotes() {
+            const storedNotes = localStorage.getItem('htmlPurifierNotes');
+            if (storedNotes) {
+                notes = JSON.parse(storedNotes);
+            } else {
+                notes = []; // Ensure it's an empty array if nothing stored
+            }
+
+            if (notes.length > 0) {
+                currentNoteId = notes[0].id; // Set the first note as active
+                editor.innerHTML = notes[0].content; // Load its content directly
+            } else {
+                // No notes in storage, create a new one, and it will become active
+                createNewNote(true); // Ensures a note is always present and active
+            }
+            renderNoteList();
+            isInitialLoad = false; // Initial load completed after first note is set
+        }
+
+        function createNewNote(activateImmediately = true) {
+            // Only save current note content if it's not the very initial load
+            // and there's a current note selected.
+            if (!isInitialLoad && currentNoteId !== null) {
+                saveCurrentNoteContent(); 
+            }
+
+            const newNote = {
+                id: Date.now().toString(), // Simple unique ID
+                title: `New Note ${notes.length + 1}`,
+                content: ''
+            };
+            notes.push(newNote);
+            saveNotes();
+            
+            if (activateImmediately) {
+                currentNoteId = newNote.id;
+                editor.innerHTML = newNote.content; // Load empty content for new note
+            }
+            renderNoteList(); // Render immediately to show new note
+        }
+
+        function saveCurrentNoteContent() {
+            // Only save if a note is actively selected and it's not the initial load
+            if (currentNoteId !== null && !isInitialLoad) {
+                const noteIndex = notes.findIndex(n => n.id === currentNoteId);
+                if (noteIndex !== -1) {
+                    notes[noteIndex].content = editor.innerHTML;
+                    saveNotes();
+                }
+            }
+        }
+
+        function loadNoteIntoEditor(id) {
+            // Save content of the note that was previously active,
+            // unless it's the very first load of the application
+            if (!isInitialLoad && currentNoteId !== null && currentNoteId !== id) {
+                 saveCurrentNoteContent(); // Save the previous note before switching
+            }
+           
+            currentNoteId = id;
+            const note = notes.find(n => n.id === id);
+            if (note) {
+                editor.innerHTML = note.content;
+                renderNoteList(); // Update active class in the sidebar
+            }
+            isInitialLoad = false; // Mark that initial load is done after any note is loaded
+            hideLinkEditor(); // Hide link editor when switching notes
+        }
+
+        function renderNoteList() {
+            noteList.innerHTML = ''; // Clear existing list
+            if (notes.length === 0) {
+                // If all notes deleted, create a new empty one and activate it
+                createNewNote(true);
+                return;
+            }
+
+            notes.forEach(note => {
+                const li = document.createElement('li');
+                li.className = `note-item ${note.id === currentNoteId ? 'active' : ''}`;
+                li.setAttribute('data-id', note.id); // Store ID for easy access
+
+                // Note name (clickable to load)
+                const noteNameSpan = document.createElement('span');
+                noteNameSpan.className = 'note-item-name';
+                noteNameSpan.textContent = note.title;
+                noteNameSpan.onclick = () => loadNoteIntoEditor(note.id);
+
+                // Actions (Rename, Delete)
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'note-actions';
+
+                const renameBtn = document.createElement('button');
+                renameBtn.innerHTML = '&#9998;'; // Pencil icon
+                renameBtn.title = 'Rename Note';
+                renameBtn.onclick = (e) => {
+                    e.stopPropagation(); // Prevent loading note when renaming
+                    renameNote(note.id);
+                };
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.innerHTML = '&#128465;'; // Trash can icon
+                deleteBtn.title = 'Delete Note';
+                deleteBtn.className = 'delete';
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation(); // Prevent loading note when deleting
+                    deleteNote(note.id);
+                };
+
+                actionsDiv.appendChild(renameBtn);
+                actionsDiv.appendChild(deleteBtn);
+
+                li.appendChild(noteNameSpan);
+                li.appendChild(actionsDiv);
+                noteList.appendChild(li);
+            });
+        }
+
+        function renameNote(id) {
+            const note = notes.find(n => n.id === id);
+            if (note) {
+                const newTitle = prompt('Enter new note title:', note.title);
+                if (newTitle !== null && newTitle.trim() !== '') {
+                    note.title = newTitle.trim();
+                    saveNotes();
+                    renderNoteList();
+                }
+            }
+        }
+
+        function deleteNote(id) {
+            if (confirm('Are you sure you want to delete this note?')) {
+                const indexToDelete = notes.findIndex(n => n.id === id);
+                if (indexToDelete !== -1) {
+                    notes.splice(indexToDelete, 1);
+                    saveNotes();
+
+                    if (currentNoteId === id) {
+                        // If deleted note was active, load the first one or create new
+                        if (notes.length > 0) {
+                            currentNoteId = notes[0].id;
+                            loadNoteIntoEditor(currentNoteId); // This will save the previous note if applicable
+                        } else {
+                            currentNoteId = null; // No notes left
+                            editor.innerHTML = ''; // Clear editor
+                            createNewNote(true); // Create a brand new empty note and activate it
+                        }
+                    }
+                    renderNoteList();
+                }
+            }
+        }
+
+        // --- Editor Core Logic ---
+
+        function execCmd(command, value = null) {
+            editor.focus();
+            hideLinkEditor(); // Hide link editor when another command is executed
+
+            if (command === 'createLink') {
+                // This command now shows the custom link editor
+                showLinkEditor('new');
+                return; // Prevent default execCommand for link
+            } else {
+                document.execCommand(command, false, value);
+            }
+            updateFormatBlockSelect();
+            saveCurrentNoteContent(); // Save after any editor command
+        }
+
+        formatBlockSelect.addEventListener('change', () => {
+            execCmd('formatBlock', formatBlockSelect.value);
+        });
+
+        function updateFormatBlockSelect() {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                let node = selection.getRangeAt(0).startContainer;
+                while (node && node !== editor && node.nodeType === Node.ELEMENT_NODE && !['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre'].includes(node.tagName.toLowerCase())) {
+                    node = node.parentNode;
+                }
+                if (node && node !== editor && ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre'].includes(node.tagName.toLowerCase())) {
+                    formatBlockSelect.value = node.tagName.toLowerCase();
+                } else {
+                    formatBlockSelect.value = 'p';
+                }
+            }
+        }
+
+        editor.addEventListener('mouseup', (event) => {
+            updateFormatBlockSelect();
+            // Store the current range when mouse is released
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                currentRange = selection.getRangeAt(0);
+            }
+            // Check if click was on a link
+            const target = event.target;
+            if (target.tagName.toLowerCase() === 'a' && editor.contains(target)) {
+                showLinkEditor('edit', target);
+            } else {
+                hideLinkEditor();
+            }
+        });
+        editor.addEventListener('keyup', (event) => {
+            updateFormatBlockSelect();
+            // Store the current range when key is released
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                currentRange = selection.getRangeAt(0);
+            }
+            hideLinkEditor(); // Hide on keyup unless explicitly creating/editing link
+        });
+
+        let cleanupTimeout;
+        editor.addEventListener('input', () => {
+            saveCurrentNoteContent(); // Existing save
+            clearTimeout(cleanupTimeout);
+            cleanupTimeout = setTimeout(() => {
+                cleanEmptyBlockTags();
+                // Optional: Re-purify the whole editor, but might be too aggressive/slow
+                // editor.innerHTML = purifyHtml(editor.innerHTML);
+            }, 300); // Debounce cleanup to avoid performance issues
+        });
+
+        // Function to clean up empty heading/list tags
+        function cleanEmptyBlockTags() {
+            const blockTagsToClean = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote'];
+            const listTagsToClean = ['li'];
+
+            // Clean up headings and blockquotes
+            editor.querySelectorAll(blockTagsToClean.join(',')).forEach(element => {
+                // Check if element is truly empty (no text, no non-empty children)
+                const isEmpty = element.textContent.trim() === '' && element.innerHTML.trim() === '';
+                if (isEmpty && element.parentNode) {
+                    const newP = document.createElement('p');
+                    element.parentNode.replaceChild(newP, element);
+                }
+            });
+
+            // Clean up list items
+            editor.querySelectorAll(listTagsToClean.join(',')).forEach(element => {
+                const isEmpty = element.textContent.trim() === '' && element.innerHTML.trim() === '';
+                if (isEmpty && element.parentNode) {
+                    // If the parent is a <ul> or <ol>, remove the li directly.
+                    // The browser's contenteditable might handle the parent list tag removal
+                    // if it becomes empty.
+                    element.parentNode.removeChild(element);
+                }
+            });
+        }
+
+
+        // Handle paste event
+        editor.addEventListener('paste', (event) => {
+            event.preventDefault();
+
+            const html = (event.clipboardData || window.clipboardData).getData('text/html');
+            const text = (event.clipboardData || window.clipboardData).getData('text/plain');
+
+            let contentToInsert;
+
+            if (html) {
+                contentToInsert = purifyHtml(html);
+            } else {
+                contentToInsert = text.split('\n')
+                                      .map(line => line.trim())
+                                      .filter(line => line.length > 0)
+                                      .map(line => `<p>${line}</p>`)
+                                      .join('');
+                if (text.trim() === '') contentToInsert = '';
+                contentToInsert = purifyHtml(contentToInsert);
+            }
+
+            document.execCommand('insertHTML', false, contentToInsert);
+            editor.innerHTML = purifyHtml(editor.innerHTML); // Final purification
+            saveCurrentNoteContent(); // Save after paste and purification
+        });
+
+        // --- HTML Purification Logic (Optimized for Performance and Bolding) ---
+        function purifyHtml(htmlString) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(htmlString, 'text/html');
+            const body = doc.body;
+
+            // 1. Remove HTML Comments
+            const comments = [];
+            const iterator = doc.createNodeIterator(body, NodeFilter.SHOW_COMMENT);
+            let commentNode;
+            while ((commentNode = iterator.nextNode())) { comments.push(commentNode); }
+            comments.forEach(comment => comment.parentNode.removeChild(comment));
+
+            // 2. Attribute Removal & Specific Tag Handling
+            const attributesToRemove = [
+                'style', 'class', 'id', 'data-mce-style', 'data-font-weight', 'lang', 'dir',
+                'align', 'valign', 'border', 'cellspacing', 'cellpadding', 'width', 'height',
+                'background', 'bgcolor', 'color', 'face', 'size', 'role', 'aria-hidden',
+                'tabindex', 'itemprop', 'itemscope', 'itemtype', 'xml:lang', 'contenteditable'
+            ];
+            
+            const allElements = Array.from(body.querySelectorAll('*'));
+
+            allElements.forEach(element => {
+                attributesToRemove.forEach(attr => element.removeAttribute(attr));
+
+                if (element.tagName.toLowerCase() === 'a') {
+                    Array.from(element.attributes).forEach(attr => {
+                        if (attr.name !== 'href' && attr.name !== 'target' && attr.name !== 'title' && attr.name !== 'rel') {
+                            element.removeAttribute(attr.name);
+                        }
+                    });
+                    if (element.href && !element.href.startsWith(window.location.origin)) {
+                        element.setAttribute('target', '_blank');
+                        element.setAttribute('rel', 'noopener noreferrer');
+                    } else if (element.href && element.href.startsWith(window.location.origin)) {
+                        element.removeAttribute('target');
+                        element.removeAttribute('rel');
+                    }
+                }
+                if (element.tagName.toLowerCase() === 'img') {
+                    Array.from(element.attributes).forEach(attr => {
+                        if (attr.name !== 'src' && attr.name !== 'alt' && attr.name !== 'title') {
+                            element.removeAttribute(attr.name);
+                        }
+                    });
+                }
+            });
+
+            // 3. Unwrap specific tags (<font>, <center>, <span>) if they have no attributes remaining
+            // Making span unwrapping more aggressive
+            const tagsToUnwrap = ['font', 'center', 'span'];
+            tagsToUnwrap.forEach(tagName => {
+                Array.from(body.querySelectorAll(tagName)).forEach(element => {
+                    // Unwrap spans regardless of attributes, and other tags if they have no attributes left
+                    if (tagName === 'span' || element.attributes.length === 0) {
+                        while (element.firstChild) {
+                            element.parentNode.insertBefore(element.firstChild, element);
+                        }
+                        element.parentNode.removeChild(element);
+                    }
+                });
+            });
+
+            // 4. Remove empty tags (if they don't contain meaningful content)
+            const blockTags = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'div', 'td', 'th'];
+            const inlineTagsThatCanBeEmpty = ['a', 'strong', 'em', 'b', 'i', 's', 'u']; 
+            
+            const allContentElements = Array.from(body.querySelectorAll(blockTags.join(',') + ',' + inlineTagsThatCanBeEmpty.join(','))).reverse();
+
+            allContentElements.forEach(element => {
+                const tagName = element.tagName.toLowerCase();
+                const isBlockTag = blockTags.includes(tagName);
+
+                const hasMeaningfulContent = Array.from(element.childNodes).some(node =>
+                    (node.nodeType === Node.TEXT_NODE && node.nodeValue.trim().length > 0) ||
+                    (node.nodeType === Node.ELEMENT_NODE && !['br', 'img', 'hr'].includes(node.tagName.toLowerCase()))
+                );
+
+                if (!hasMeaningfulContent && element.children.length === 0 && element.parentNode) {
+                    if (isBlockTag || (inlineTagsThatCanBeEmpty.includes(tagName) && element.textContent.trim() === '')) {
+                        element.parentNode.removeChild(element);
+                    }
+                }
+            });
+
+            // 5. Clean up <br> tags within block elements
+            body.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, td, th').forEach(block => {
+                while (block.firstChild && block.firstChild.nodeName === 'BR') {
+                    block.removeChild(block.firstChild);
+                }
+                while (block.lastChild && block.lastChild.nodeName === 'BR') {
+                    block.removeChild(block.lastChild);
+                }
+            });
+
+            // 6. Final string-based BR cleanup for consecutive or misplaced <br> tags
+            let finalHtml = body.innerHTML;
+            finalHtml = finalHtml.replace(/(<br\s*\/?>\s*){2,}/gi, '<br>');
+            finalHtml = finalHtml.replace(/<br\s*\/?>\s*(<\/?(p|div|h[1-6]|ul|ol|li|blockquote|table|tr|td|th)>)/gi, '$1');
+            finalHtml = finalHtml.replace(/(<\/?(p|div|h[1-6]|ul|ol|li|blockquote|table|tr|td|th)>)\s*<br\s*\/?>/gi, '$1');
+
+            return finalHtml;
+        }
+
+        // --- Source Code Toggle Logic ---
+        toggleSourceButton.addEventListener('click', () => {
+            if (sourceCodeDiv.style.display === 'none') {
+                const currentHtml = editor.innerHTML;
+                const purifiedHtml = purifyHtml(currentHtml);
+                sourceCodeTextarea.value = formatHtml(purifiedHtml);
+                editorVisualContainer.style.display = 'none';
+                sourceCodeDiv.style.display = 'flex';
+                toggleSourceButton.textContent = 'Hide Source Code';
+                hideLinkEditor(); // Hide link editor when switching to source view
+            } else {
+                editorVisualContainer.style.display = 'flex';
+                sourceCodeDiv.style.display = 'none';
+                toggleSourceButton.textContent = 'Show Source Code';
+
+                const newHtml = sourceCodeTextarea.value;
+                const purifiedHtml = purifyHtml(newHtml);
+                editor.innerHTML = purifiedHtml;
+                saveCurrentNoteContent(); // Save changes made in source view
+            }
+        });
+
+        applySourceButton.addEventListener('click', () => {
+            const newHtml = sourceCodeTextarea.value;
+            const purifiedHtml = purifyHtml(newHtml);
+            editor.innerHTML = purifiedHtml;
+
+            editorVisualContainer.style.display = 'flex';
+            sourceCodeDiv.style.display = 'none';
+            toggleSourceButton.textContent = 'Show Source Code';
+            saveCurrentNoteContent(); // Save applied changes
+        });
+
+        // Helper function to format HTML for better readability
+        function formatHtml(html) {
+            let formatted = html.replace(/></g, '>\n<');
+            formatted = formatted.replace(/(<\/[a-z]+>)(<[a-z]+>)/g, '$1\n$2');
+            formatted = formatted.replace(/(>)(<[a-z])/g, '$1\n$2');
+            formatted = formatted.replace(/(\r\n|\n|\r)/gm, '\n').trim();
+
+            let indent = 0;
+            const lines = formatted.split('\n');
+            let finalHtml = [];
+            const indentTags = ['html', 'body', 'div', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'table', 'tr', 'td', 'th', 'blockquote', 'a', 'img', 'span', 'strong', 'em', 'b', 'i', 'pre'];
+
+            lines.forEach(line => {
+                const trimmedLine = line.trim();
+                let shouldDedent = false;
+                let shouldIndent = false;
+
+                if (trimmedLine.startsWith('</') && indent > 0) {
+                    const tagNameMatch = trimmedLine.match(/^<\/([a-z]+)/i);
+                    if (tagNameMatch && indentTags.includes(tagNameMatch[1].toLowerCase())) {
+                        indent--;
+                        shouldDedent = true;
+                    }
+                }
+
+                if (trimmedLine !== '') {
+                    finalHtml.push(' '.repeat(indent * 2) + trimmedLine);
+                }
+
+                if (trimmedLine.startsWith('<') && !trimmedLine.startsWith('</') && !trimmedLine.endsWith('/>')) {
+                    const tagNameMatch = trimmedLine.match(/^<([a-z]+)/i);
+                    if (tagNameMatch && indentTags.includes(tagNameMatch[1].toLowerCase()) && !['br', 'img', 'hr'].includes(tagNameMatch[1].toLowerCase())) {
+                        shouldIndent = true;
+                    }
+                }
+
+                if (shouldIndent && !shouldDedent) {
+                    indent++;
+                }
+            });
+
+            return finalHtml.join('\n');
+        }
+
+        // --- Link Editor Logic ---
+
+        // Event listener for the "Link" toolbar button
+        createLinkBtn.addEventListener('click', () => execCmd('createLink'));
+
+        function showLinkEditor(mode, linkElement = null) {
+            currentLinkElement = linkElement; // Store the clicked <a> element for editing
+
+            if (mode === 'new') {
+                linkUrlInput.value = 'https://';
+                linkRemoveButton.style.display = 'none'; // Hide remove button for new links
+                // Ensure there's a selection or cursor position to create a link
+                const selection = window.getSelection();
+                if (selection.rangeCount > 0) {
+                    currentRange = selection.getRangeAt(0); // Store range for new link creation
+                } else {
+                    // No selection, place cursor at end
+                    editor.focus();
+                    const range = document.createRange();
+                    range.selectNodeContents(editor);
+                    range.collapse(false);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                    currentRange = selection.getRangeAt(0);
+                }
+            } else if (mode === 'edit' && linkElement) {
+                linkUrlInput.value = linkElement.href;
+                linkRemoveButton.style.display = 'inline-block'; // Show remove button for existing links
+                currentRange = null; // No specific range for editing, just the element
+            }
+
+            // Position the link editor
+            const editorRect = editor.getBoundingClientRect();
+            let rect;
+
+            if (currentLinkElement) {
+                rect = currentLinkElement.getBoundingClientRect();
+            } else if (currentRange) {
+                // Get rect of current selection
+                rect = currentRange.getBoundingClientRect();
+                // If selection is collapsed (cursor), rect might be 0 height/width
+                if (rect.width === 0 && rect.height === 0) {
+                    // Create a temporary span to get a meaningful rect
+                    const tempSpan = document.createElement('span');
+                    tempSpan.textContent = '\uFEFF'; // Zero-width non-breaking space
+                    currentRange.insertNode(tempSpan);
+                    rect = tempSpan.getBoundingClientRect();
+                    tempSpan.parentNode.removeChild(tempSpan); // Clean up
+                }
+            } else {
+                // Fallback, position near the top-left of the editor
+                rect = { top: editorRect.top + 20, left: editorRect.left + 20, width: 0, height: 0 };
+            }
+
+            // Calculate position relative to the editor container
+            const containerRect = editorVisualContainer.getBoundingClientRect();
+            let top = rect.top - containerRect.top - linkEditor.offsetHeight - 10; // 10px above the element/selection
+            let left = rect.left - containerRect.left + (rect.width / 2) - (linkEditor.offsetWidth / 2);
+
+            // Keep within editor container boundaries
+            if (top < 0) top = 0; // Don't go above container
+            if (left < 0) left = 0; // Don't go left of container
+            if (left + linkEditor.offsetWidth > containerRect.width) {
+                left = containerRect.width - linkEditor.offsetWidth; // Don't go right of container
+            }
+
+
+            linkEditor.style.top = `${top}px`;
+            linkEditor.style.left = `${left}px`;
+            linkEditor.classList.add('active'); // Show with transition
+            linkUrlInput.focus(); // Focus input for immediate typing
+        }
+
+        function hideLinkEditor() {
+            linkEditor.classList.remove('active'); // Hide with transition
+            currentLinkElement = null; // Clear active link
+            currentRange = null; // Clear active range
+        }
+
+        // Handle update button click
+        linkUpdateButton.addEventListener('click', () => {
+            const url = linkUrlInput.value.trim();
+            if (url) {
+                editor.focus();
+                if (currentLinkElement) {
+                    // Editing existing link: directly update href
+                    currentLinkElement.href = url;
+                } else if (currentRange) {
+                    // Creating new link: apply to current selection
+                    const selection = window.getSelection();
+                    selection.removeAllRanges();
+                    selection.addRange(currentRange);
+                    document.execCommand('createLink', false, url);
+                }
+                saveCurrentNoteContent();
+            }
+            hideLinkEditor();
+        });
+
+        // Handle remove button click
+        linkRemoveButton.addEventListener('click', () => {
+            editor.focus();
+            if (currentLinkElement) {
+                // Select the link to be unlinked
+                const range = document.createRange();
+                range.selectNode(currentLinkElement);
+                const selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(range);
+            }
+            document.execCommand('unlink');
+            saveCurrentNoteContent();
+            hideLinkEditor();
+        });
+
+        // Hide link editor if clicking outside it or the editor itself
+        document.addEventListener('mousedown', (event) => {
+            const isClickInsideEditor = editor.contains(event.target);
+            const isClickInsideLinkEditor = linkEditor.contains(event.target);
+            const isClickOnToolbar = editorVisualContainer.querySelector('.navbar-toolbar').contains(event.target);
+
+            if (!isClickInsideEditor && !isClickInsideLinkEditor && !isClickOnToolbar) {
+                hideLinkEditor();
+            }
+        });
+
+        // Hide link editor on Escape key press
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                hideLinkEditor();
+            }
+        });
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', loadNotes);
+        window.addEventListener('beforeunload', saveCurrentNoteContent); // Save on page close/refresh
+    </script>
+</body>
+</html>
