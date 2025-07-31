@@ -829,34 +829,29 @@
             comments.forEach(comment => comment.parentNode.removeChild(comment));
 
             // 2. Convert spans and other elements with bold styles to <strong>
-            const allElements = Array.from(body.querySelectorAll('*'));
-            allElements.forEach(element => {
+            // This needs to be done *before* general attribute removal,
+            // so we can properly identify elements by their style attributes.
+            Array.from(body.querySelectorAll('*')).forEach(element => {
                 const tagName = element.tagName.toLowerCase();
                 const styleAttr = element.getAttribute('style') || '';
                 const isBold = styleAttr.match(/font-weight:\s*(bold|700|800|900)/i) ||
-                               element.style.fontWeight.match(/bold|700|800|900/i);
+                               (element.style && element.style.fontWeight && element.style.fontWeight.match(/bold|700|800|900/i));
 
-                if ((tagName === 'span' || ['div', 'p', 'li'].includes(tagName)) && isBold && element.textContent.trim() !== '') {
+                // Only convert if it's not already a bold tag and has content
+                if (!['b', 'strong'].includes(tagName) && isBold && element.textContent.trim() !== '') {
                     const strong = doc.createElement('strong');
+                    // Move all children to the new strong tag
                     while (element.firstChild) {
                         strong.appendChild(element.firstChild);
                     }
-                    element.parentNode.replaceChild(strong, element);
+                    // Replace the original element with the new strong tag
+                    if (element.parentNode) {
+                        element.parentNode.replaceChild(strong, element);
+                    }
                 }
             });
 
-            // 3. Preserve existing <b> and <strong> tags
-            const boldTags = ['b', 'strong'];
-            boldTags.forEach(tagName => {
-                Array.from(body.querySelectorAll(tagName)).forEach(element => {
-                    // Ensure bold tags are not removed and have no unwanted attributes
-                    Array.from(element.attributes).forEach(attr => {
-                        element.removeAttribute(attr.name);
-                    });
-                });
-            });
-
-            // 4. Attribute Removal for other elements
+            // 3. Define attributes to remove globally
             const attributesToRemove = [
                 'style', 'class', 'id', 'data-mce-style', 'data-font-weight', 'lang', 'dir',
                 'align', 'valign', 'border', 'cellspacing', 'cellpadding', 'width', 'height',
@@ -864,39 +859,55 @@
                 'tabindex', 'itemprop', 'itemscope', 'itemtype', 'xml:lang', 'contenteditable'
             ];
 
-            allElements.forEach(element => {
+            // 4. Iterate over all elements for attribute cleanup and specific tag handling
+            Array.from(body.querySelectorAll('*')).forEach(element => {
                 const tagName = element.tagName.toLowerCase();
-                if (!boldTags.includes(tagName)) { // Skip <b> and <strong>
-                    attributesToRemove.forEach(attr => element.removeAttribute(attr));
 
-                    if (tagName === 'a') {
-                        Array.from(element.attributes).forEach(attr => {
-                            if (attr.name !== 'href' && attr.name !== 'target' && attr.name !== 'title' && attr.name !== 'rel') {
-                                element.removeAttribute(attr.name);
-                            }
-                        });
-                        if (element.href && !element.href.startsWith(window.location.origin)) {
-                            element.setAttribute('target', '_blank');
-                            element.setAttribute('rel', 'noopener noreferrer');
-                        } else if (element.href && element.href.startsWith(window.location.origin)) {
-                            element.removeAttribute('target');
-                            element.removeAttribute('rel');
+                // Specific handling for <a> tags
+                if (tagName === 'a') {
+                    Array.from(element.attributes).forEach(attr => {
+                        // Preserve href, target, title, rel, but remove others
+                        if (!['href', 'target', 'title', 'rel'].includes(attr.name)) {
+                            element.removeAttribute(attr.name);
                         }
+                    });
+                    // Ensure external links open in new tab and have rel="noopener noreferrer"
+                    if (element.href && !element.href.startsWith(window.location.origin)) {
+                        element.setAttribute('target', '_blank');
+                        element.setAttribute('rel', 'noopener noreferrer');
+                    } else if (element.href && element.href.startsWith(window.location.origin)) {
+                        // For internal links, ensure target and rel are not set
+                        element.removeAttribute('target');
+                        element.removeAttribute('rel');
                     }
-                    if (tagName === 'img') {
-                        Array.from(element.attributes).forEach(attr => {
-                            if (attr.name !== 'src' && attr.name !== 'alt' && attr.name !== 'title') {
-                                element.removeAttribute(attr.name);
-                            }
-                        });
-                    }
+                }
+                // Specific handling for <img> tags
+                else if (tagName === 'img') {
+                    Array.from(element.attributes).forEach(attr => {
+                        // Preserve src, alt, title, but remove others
+                        if (!['src', 'alt', 'title'].includes(attr.name)) {
+                            element.removeAttribute(attr.name);
+                        }
+                    });
+                }
+                // Preserve <b> and <strong>, just remove unwanted attributes from them
+                else if (tagName === 'b' || tagName === 'strong') {
+                    Array.from(element.attributes).forEach(attr => {
+                        // We typically want to remove all attributes from bold tags to keep them clean
+                        element.removeAttribute(attr.name);
+                    });
+                }
+                // For all other tags, remove the general set of attributes
+                else {
+                    attributesToRemove.forEach(attr => element.removeAttribute(attr));
                 }
             });
 
-            // 5. Unwrap specific tags (<font>, <center>, <span>) if they have no attributes and are not needed
+            // 5. Unwrap specific tags (<font>, <center>, <span>) if they have no semantic value after attribute removal
             const tagsToUnwrap = ['font', 'center', 'span'];
             tagsToUnwrap.forEach(tagName => {
                 Array.from(body.querySelectorAll(tagName)).forEach(element => {
+                    // Unwrap if it has no attributes remaining and is not a strong tag (which it might have become)
                     if (element.attributes.length === 0 && element.textContent.trim() !== '') {
                         while (element.firstChild) {
                             element.parentNode.insertBefore(element.firstChild, element);
@@ -907,28 +918,41 @@
             });
 
             // 6. Remove empty tags (if they don't contain meaningful content)
+            // IMPORTANT: Iterate in reverse to safely remove children without affecting indexing
             const blockTags = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'div', 'td', 'th'];
-            const inlineTagsThatCanBeEmpty = ['a', 'strong', 'em', 'b', 'i', 's', 'u'];
+            // Do NOT include 'b' or 'strong' here if they are meant to wrap content,
+            // unless they are truly empty. The `textContent.trim() === ''` check should handle.
+            const inlineTagsThatCanBeEmpty = ['a', 'em', 'i', 's', 'u']; // 'b' and 'strong' are handled carefully below
 
-            const allContentElements = Array.from(body.querySelectorAll(blockTags.join(',') + ',' + inlineTagsThatCanBeEmpty.join(','))).reverse();
+            const allContentElements = Array.from(body.querySelectorAll(
+                [...blockTags, ...inlineTagsThatCanBeEmpty, 'b', 'strong'].join(',')
+            )).reverse();
 
             allContentElements.forEach(element => {
                 const tagName = element.tagName.toLowerCase();
                 const isBlockTag = blockTags.includes(tagName);
 
+                // A tag has meaningful content if it has non-whitespace text or non-empty non-br/img/hr children
                 const hasMeaningfulContent = Array.from(element.childNodes).some(node =>
                     (node.nodeType === Node.TEXT_NODE && node.nodeValue.trim().length > 0) ||
-                    (node.nodeType === Node.ELEMENT_NODE && !['br', 'img', 'hr'].includes(node.tagName.toLowerCase()))
+                    (node.nodeType === Node.ELEMENT_NODE && !['br', 'img', 'hr'].includes(node.tagName.toLowerCase()) && node.textContent.trim().length > 0)
+                    // The last part `node.textContent.trim().length > 0` is crucial for nested empty tags
                 );
 
+                // Remove element if it's a block tag or an inline tag that is truly empty
                 if (!hasMeaningfulContent && element.children.length === 0 && element.parentNode) {
-                    if (isBlockTag || (inlineTagsThatCanBeEmpty.includes(tagName) && element.textContent.trim() === '')) {
+                    // Handle `b` and `strong` specifically: remove only if they contain absolutely no content
+                    if (tagName === 'b' || tagName === 'strong') {
+                        if (element.textContent.trim() === '') { // Only remove if text content is empty
+                            element.parentNode.removeChild(element);
+                        }
+                    } else if (isBlockTag || inlineTagsThatCanBeEmpty.includes(tagName)) {
                         element.parentNode.removeChild(element);
                     }
                 }
             });
 
-            // 7. Clean up <br> tags within block elements
+            // 7. Clean up <br> tags within block elements (leading/trailing)
             body.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, td, th').forEach(block => {
                 while (block.firstChild && block.firstChild.nodeName === 'BR') {
                     block.removeChild(block.firstChild);
@@ -940,9 +964,13 @@
 
             // 8. Final string-based BR cleanup for consecutive or misplaced <br> tags
             let finalHtml = body.innerHTML;
+            // Replace 2 or more consecutive <br> with a single <br>
             finalHtml = finalHtml.replace(/(<br\s*\/?>\s*){2,}/gi, '<br>');
+            // Remove <br> immediately before a block-level closing tag or opening tag
             finalHtml = finalHtml.replace(/<br\s*\/?>\s*(<\/?(p|div|h[1-6]|ul|ol|li|blockquote|table|tr|td|th)>)/gi, '$1');
             finalHtml = finalHtml.replace(/(<\/?(p|div|h[1-6]|ul|ol|li|blockquote|table|tr|td|th)>)\s*<br\s*\/?>/gi, '$1');
+            // Remove <br> that might be the only content of a paragraph (e.g., `<p><br></p>`)
+            finalHtml = finalHtml.replace(/<p>\s*<br\s*\/?>\s*<\/p>/gi, '<p></p>'); // Can also remove the empty <p> later if desired
 
             return finalHtml;
         }
