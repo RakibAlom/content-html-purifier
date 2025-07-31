@@ -789,7 +789,6 @@
             });
         }
 
-
         // Handle paste event
         editor.addEventListener('paste', (event) => {
             event.preventDefault();
@@ -816,7 +815,7 @@
             saveCurrentNoteContent(); // Save after paste and purification
         });
 
-        // --- HTML Purification Logic (Optimized for Performance and Bolding) ---
+        // --- HTML Purification Logic (Optimized for Preserving Bold Text) ---
         function purifyHtml(htmlString) {
             const parser = new DOMParser();
             const doc = parser.parseFromString(htmlString, 'text/html');
@@ -829,49 +828,76 @@
             while ((commentNode = iterator.nextNode())) { comments.push(commentNode); }
             comments.forEach(comment => comment.parentNode.removeChild(comment));
 
-            // 2. Attribute Removal & Specific Tag Handling
+            // 2. Convert spans and other elements with bold styles to <strong>
+            const allElements = Array.from(body.querySelectorAll('*'));
+            allElements.forEach(element => {
+                const tagName = element.tagName.toLowerCase();
+                const styleAttr = element.getAttribute('style') || '';
+                const isBold = styleAttr.match(/font-weight:\s*(bold|700|800|900)/i) ||
+                               element.style.fontWeight.match(/bold|700|800|900/i);
+
+                if ((tagName === 'span' || ['div', 'p', 'li'].includes(tagName)) && isBold && element.textContent.trim() !== '') {
+                    const strong = doc.createElement('strong');
+                    while (element.firstChild) {
+                        strong.appendChild(element.firstChild);
+                    }
+                    element.parentNode.replaceChild(strong, element);
+                }
+            });
+
+            // 3. Preserve existing <b> and <strong> tags
+            const boldTags = ['b', 'strong'];
+            boldTags.forEach(tagName => {
+                Array.from(body.querySelectorAll(tagName)).forEach(element => {
+                    // Ensure bold tags are not removed and have no unwanted attributes
+                    Array.from(element.attributes).forEach(attr => {
+                        element.removeAttribute(attr.name);
+                    });
+                });
+            });
+
+            // 4. Attribute Removal for other elements
             const attributesToRemove = [
                 'style', 'class', 'id', 'data-mce-style', 'data-font-weight', 'lang', 'dir',
                 'align', 'valign', 'border', 'cellspacing', 'cellpadding', 'width', 'height',
                 'background', 'bgcolor', 'color', 'face', 'size', 'role', 'aria-hidden',
                 'tabindex', 'itemprop', 'itemscope', 'itemtype', 'xml:lang', 'contenteditable'
             ];
-            
-            const allElements = Array.from(body.querySelectorAll('*'));
 
             allElements.forEach(element => {
-                attributesToRemove.forEach(attr => element.removeAttribute(attr));
+                const tagName = element.tagName.toLowerCase();
+                if (!boldTags.includes(tagName)) { // Skip <b> and <strong>
+                    attributesToRemove.forEach(attr => element.removeAttribute(attr));
 
-                if (element.tagName.toLowerCase() === 'a') {
-                    Array.from(element.attributes).forEach(attr => {
-                        if (attr.name !== 'href' && attr.name !== 'target' && attr.name !== 'title' && attr.name !== 'rel') {
-                            element.removeAttribute(attr.name);
+                    if (tagName === 'a') {
+                        Array.from(element.attributes).forEach(attr => {
+                            if (attr.name !== 'href' && attr.name !== 'target' && attr.name !== 'title' && attr.name !== 'rel') {
+                                element.removeAttribute(attr.name);
+                            }
+                        });
+                        if (element.href && !element.href.startsWith(window.location.origin)) {
+                            element.setAttribute('target', '_blank');
+                            element.setAttribute('rel', 'noopener noreferrer');
+                        } else if (element.href && element.href.startsWith(window.location.origin)) {
+                            element.removeAttribute('target');
+                            element.removeAttribute('rel');
                         }
-                    });
-                    if (element.href && !element.href.startsWith(window.location.origin)) {
-                        element.setAttribute('target', '_blank');
-                        element.setAttribute('rel', 'noopener noreferrer');
-                    } else if (element.href && element.href.startsWith(window.location.origin)) {
-                        element.removeAttribute('target');
-                        element.removeAttribute('rel');
                     }
-                }
-                if (element.tagName.toLowerCase() === 'img') {
-                    Array.from(element.attributes).forEach(attr => {
-                        if (attr.name !== 'src' && attr.name !== 'alt' && attr.name !== 'title') {
-                            element.removeAttribute(attr.name);
-                        }
-                    });
+                    if (tagName === 'img') {
+                        Array.from(element.attributes).forEach(attr => {
+                            if (attr.name !== 'src' && attr.name !== 'alt' && attr.name !== 'title') {
+                                element.removeAttribute(attr.name);
+                            }
+                        });
+                    }
                 }
             });
 
-            // 3. Unwrap specific tags (<font>, <center>, <span>) if they have no attributes remaining
-            // Making span unwrapping more aggressive
+            // 5. Unwrap specific tags (<font>, <center>, <span>) if they have no attributes and are not needed
             const tagsToUnwrap = ['font', 'center', 'span'];
             tagsToUnwrap.forEach(tagName => {
                 Array.from(body.querySelectorAll(tagName)).forEach(element => {
-                    // Unwrap spans regardless of attributes, and other tags if they have no attributes left
-                    if (tagName === 'span' || element.attributes.length === 0) {
+                    if (element.attributes.length === 0 && element.textContent.trim() !== '') {
                         while (element.firstChild) {
                             element.parentNode.insertBefore(element.firstChild, element);
                         }
@@ -880,10 +906,10 @@
                 });
             });
 
-            // 4. Remove empty tags (if they don't contain meaningful content)
+            // 6. Remove empty tags (if they don't contain meaningful content)
             const blockTags = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'div', 'td', 'th'];
-            const inlineTagsThatCanBeEmpty = ['a', 'strong', 'em', 'b', 'i', 's', 'u']; 
-            
+            const inlineTagsThatCanBeEmpty = ['a', 'strong', 'em', 'b', 'i', 's', 'u'];
+
             const allContentElements = Array.from(body.querySelectorAll(blockTags.join(',') + ',' + inlineTagsThatCanBeEmpty.join(','))).reverse();
 
             allContentElements.forEach(element => {
@@ -902,7 +928,7 @@
                 }
             });
 
-            // 5. Clean up <br> tags within block elements
+            // 7. Clean up <br> tags within block elements
             body.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, td, th').forEach(block => {
                 while (block.firstChild && block.firstChild.nodeName === 'BR') {
                     block.removeChild(block.firstChild);
@@ -912,7 +938,7 @@
                 }
             });
 
-            // 6. Final string-based BR cleanup for consecutive or misplaced <br> tags
+            // 8. Final string-based BR cleanup for consecutive or misplaced <br> tags
             let finalHtml = body.innerHTML;
             finalHtml = finalHtml.replace(/(<br\s*\/?>\s*){2,}/gi, '<br>');
             finalHtml = finalHtml.replace(/<br\s*\/?>\s*(<\/?(p|div|h[1-6]|ul|ol|li|blockquote|table|tr|td|th)>)/gi, '$1');
@@ -1063,7 +1089,6 @@
             if (left + linkEditor.offsetWidth > containerRect.width) {
                 left = containerRect.width - linkEditor.offsetWidth; // Don't go right of container
             }
-
 
             linkEditor.style.top = `${top}px`;
             linkEditor.style.left = `${left}px`;
