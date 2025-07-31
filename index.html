@@ -815,7 +815,7 @@
             saveCurrentNoteContent(); // Save after paste and purification
         });
 
-        // --- HTML Purification Logic (Optimized for Preserving Bold Text) ---
+        // --- HTML Purification Logic (Optimized for Preserving Bold Text and Links) ---
         function purifyHtml(htmlString) {
             const parser = new DOMParser();
             const doc = parser.parseFromString(htmlString, 'text/html');
@@ -871,15 +871,6 @@
                             element.removeAttribute(attr.name);
                         }
                     });
-                    // Ensure external links open in new tab and have rel="noopener noreferrer"
-                    if (element.href && !element.href.startsWith(window.location.origin)) {
-                        element.setAttribute('target', '_blank');
-                        element.setAttribute('rel', 'noopener noreferrer');
-                    } else if (element.href && element.href.startsWith(window.location.origin)) {
-                        // For internal links, ensure target and rel are not set
-                        element.removeAttribute('target');
-                        element.removeAttribute('rel');
-                    }
                 }
                 // Specific handling for <img> tags
                 else if (tagName === 'img') {
