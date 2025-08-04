@@ -70,6 +70,43 @@
         #sidebar.hidden {
             transform: translateX(-100%);
         }
+        .active-note {
+            background-color: #374151 !important; /* Tailwind blue-600 */
+            color: white !important;
+            font-weight: 600;
+        }
+        .active-note:hover {
+            background-color: #1d4ed8; /* Tailwind blue-700 (deeper color) */
+        }
+        #helpModal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+        }
+        #helpModalContent {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #1a202c;
+            padding: 20px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 80vh; /* Increased height to accommodate full video */
+            overflow-y: auto;
+            color: #d1d5db;
+        }
+        #helpModalContent h1 { font-size: 2em; margin-bottom: 0.5em; }
+        #helpModalContent h2 { font-size: 1.5em; margin-top: 1em; margin-bottom: 0.5em; }
+        #helpModalContent ol { margin-left: 1.5em; margin-bottom: 1em; }
+        #helpModalContent li { margin-bottom: 0.5em; }
+        #helpModalContent video { width: 100%; margin-top: 1em; }
     </style>
 </head>
 <body class="h-screen w-screen overflow-hidden font-sans bg-gray-900 text-gray-300">
@@ -78,19 +115,20 @@
         <div id="sidebar" class="fixed md:static top-0 left-0 w-64 md:w-[250px] md:min-w-[250px] bg-gray-800 border-r md:border-r border-gray-600 p-4 flex flex-col justify-between gap-4 overflow-y-auto h-full z-[1000]">
             <div class="flex flex-col gap-4">
                 <div class="flex justify-center md:justify-between items-center">
-                    <span class="text-xl font-semibold text-white hidden md:block">Notes</span>
+                    <span id="notesTitle" class="text-xl font-semibold text-white cursor-pointer" onclick="loadMainPage()">Notes</span>
                     <button id="closeSidebar" class="md:hidden text-white text-xl p-2 rounded hover:bg-gray-700 transition-colors">×</button>
                 </div>
                 <button class="w-full bg-blue-500 text-white py-2 px-4 rounded font-semibold cursor-pointer text-center hover:bg-blue-600 transition-colors" onclick="createNewNote()">New Note</button>
                 <ul id="noteList" class="list-none p-0 m-0 flex-grow"></ul>
             </div>
-            <div class="pt-4 border-t border-gray-600 text-center text-xs text-gray-400">
-                <small>Developed by <a href="https://rakibalom.com/" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:text-blue-600 hover:underline font-medium">Rakib Alom</a></small>
+            <div class="pt-4 border-t border-gray-600 text-center">
+                <button id="helpDocsBtn" class="w-full bg-gray-700 text-white py-2 px-4 rounded font-semibold cursor-pointer hover:bg-gray-600 transition-colors">Help & Docs</button>
+                <small class="mt-2 block text-xs text-gray-400">Developed by <a href="https://rakibalom.com/" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:text-blue-600 hover:underline font-medium">Rakib Alom</a></small>
             </div>
         </div>
         <div id="overlay" class="fixed inset-0 bg-black bg-opacity-50 z-[900] hidden md:hidden"></div>
 
-        <div class="flex-grow flex flex-col p-2 md:p-4 pt-12 md:pt-4 overflow-y-auto">
+        <div id="mainContent" class="flex-grow flex flex-col p-2 md:p-4 pt-12 md:pt-4 overflow-y-auto">
             <header class="text-center mb-6">
                 <h1 class="text-4xl font-extrabold text-white">Content HTML Purifier 🚀</h1>
                 <p class="text-lg text-gray-400 mt-2">This custom editor cleans HTML. Paste content from Google Docs or any website; it will remove extra HTML, inline styles, and redundant tags, leaving professional, semantic HTML.</p>
@@ -144,6 +182,28 @@
                 </div>
             </div>
         </div>
+
+        <div id="helpModal" class="hidden">
+            <div id="helpModalContent">
+                <h1>How to Use Content HTML Purifier</h1>
+                <p class="mt-2">This tool helps you clean and purify HTML content from sources like Google Docs or websites. Follow these steps to get started:</p>
+                <ol class="mt-4">
+                    <li><strong>Access the Editor</strong>: Open the tool and ensure the sidebar is visible (toggle with ☰ on mobile).</li>
+                    <li><strong>Create a New Note</strong>: Click "New Note" to start a fresh document.</li>
+                    <li><strong>Paste Content</strong>: Copy content from Google Docs or a website and paste it into the editor.</li>
+                    <li><strong>Format Text</strong>: Use the toolbar buttons (e.g., Bold, Italic, Lists) to format your content.</li>
+                    <li><strong>Purify HTML</strong>: Click "Show Source Code" to view and apply a cleaned version of your HTML.</li>
+                    <li><strong>Save Work</strong>: Notes are auto-saved; switch between them using the sidebar.</li>
+                    <li><strong>Add Links/Images</strong>: Use the "Link" or "Image" buttons to insert hyperlinks or images.</li>
+                    <li><strong>Review Changes</strong>: Use "Help & Docs" for guidance or watch the video below.</li>
+                </ol>
+                <h2>Tutorial Video</h2>
+                <video controls width="100%">
+                    <source src="https://github.com/RakibAlom/content-html-purifier/raw/refs/heads/main/content-html-purifier-tool-review.mp4" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -164,6 +224,11 @@
         const closeSidebar = document.getElementById('closeSidebar');
         const sidebar = document.getElementById('sidebar');
         const overlay = document.getElementById('overlay');
+        const mainContent = document.getElementById('mainContent');
+        const helpModal = document.getElementById('helpModal');
+        const helpModalContent = document.getElementById('helpModalContent');
+        const notesTitle = document.getElementById('notesTitle');
+        const helpDocsBtn = document.getElementById('helpDocsBtn');
 
         let notes = [];
         let currentNoteId = null;
@@ -189,6 +254,7 @@
             if (!sidebar.classList.contains('hidden')) {
                 toggleSidebar();
             }
+            hideHelpModal();
         });
 
         function saveNotes() {
@@ -278,6 +344,7 @@
             isInitialLoad = false;
             hideLinkEditor();
             if (window.innerWidth < 768) toggleSidebar();
+            hideHelpModal();
         }
 
         function renderNoteList() {
@@ -292,7 +359,7 @@
 
             notes.forEach(note => {
                 const li = document.createElement('li');
-                li.className = `flex justify-between items-center py-2 px-2 rounded mb-2 bg-transparent text-gray-300 cursor-pointer transition-colors overflow-hidden whitespace-nowrap text-ellipsis hover:bg-gray-700 ${note.id === currentNoteId ? 'bg-blue-600 text-white font-semibold' : ''}`;
+                li.className = `flex justify-between items-center py-2 px-2 rounded mb-2 bg-transparent text-gray-300 cursor-pointer transition-colors overflow-hidden whitespace-nowrap text-ellipsis hover:bg-gray-700 ${note.id === currentNoteId ? 'active-note' : ''}`;
                 li.setAttribute('data-id', note.id);
 
                 const noteNameSpan = document.createElement('span');
@@ -857,8 +924,26 @@
                 if (window.innerWidth < 768 && !sidebar.classList.contains('hidden')) {
                     toggleSidebar();
                 }
+                hideHelpModal();
             }
         });
+
+        function showMainContent() {
+            mainContent.querySelectorAll('#editor, #sourceCode').forEach(el => el.classList.add('hidden'));
+            editor.classList.remove('hidden');
+            sourceCodeDiv.classList.add('hidden');
+            hideHelpModal();
+        }
+
+        function showHelpModal() {
+            helpModal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function hideHelpModal() {
+            helpModal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
 
         document.addEventListener('DOMContentLoaded', () => {
             console.log('DOM fully loaded, initializing sidebar');
@@ -871,6 +956,10 @@
                 sidebar.classList.add('hidden');
                 overlay.classList.add('hidden');
             }
+            helpDocsBtn.addEventListener('click', showHelpModal);
+            helpModal.addEventListener('click', (e) => {
+                if (e.target === helpModal) hideHelpModal();
+            });
         });
         window.addEventListener('beforeunload', saveCurrentNoteContent);
     </script>
